@@ -6,16 +6,13 @@ import os
 import logging
 from dotenv import load_dotenv
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
 
 app = FastAPI(title="Odds Platform API")
 
-# Add middleware to log all requests
 @app.middleware("http")
 async def log_requests(request, call_next):
     logger.info(f"REQUEST: {request.method} {request.url.path} - Query: {dict(request.query_params)}")
@@ -37,36 +34,69 @@ ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 if not ODDS_API_KEY:
     raise ValueError("A variável ODDS_API_KEY não foi configurada no arquivo .env")
 
+# Ligas alargadas — inclui competições com jogos em junho/verão
 LEAGUES = {
-    "soccer_england_premier_league": {"name": "Premier League", "country": "England", "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿"},
-    "soccer_spain_la_liga":          {"name": "La Liga",         "country": "Spain",   "flag": "🇪🇸"},
-    "soccer_italy_serie_a":          {"name": "Serie A",         "country": "Italy",   "flag": "🇮🇹"},
-    "soccer_germany_bundesliga":     {"name": "Bundesliga",      "country": "Germany", "flag": "🇩🇪"},
-    "soccer_france_ligue_one":       {"name": "Ligue 1",         "country": "France",  "flag": "🇫🇷"},
-    "soccer_portugal_primeira_liga": {"name": "Primeira Liga",   "country": "Portugal","flag": "🇵🇹"},
+    # Grandes ligas europeias (época Set-Mai, podem estar fora de temporada em Junho)
+    "soccer_england_premier_league":  {"name": "Premier League",   "country": "England",     "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿"},
+    "soccer_spain_la_liga":           {"name": "La Liga",          "country": "Spain",        "flag": "🇪🇸"},
+    "soccer_italy_serie_a":           {"name": "Serie A",          "country": "Italy",        "flag": "🇮🇹"},
+    "soccer_germany_bundesliga":      {"name": "Bundesliga",       "country": "Germany",      "flag": "🇩🇪"},
+    "soccer_france_ligue_one":        {"name": "Ligue 1",          "country": "France",       "flag": "🇫🇷"},
+    "soccer_portugal_primeira_liga":  {"name": "Primeira Liga",    "country": "Portugal",     "flag": "🇵🇹"},
+    # Competições europeias (podem ter finais ou pré-época em junho)
+    "soccer_uefa_champs_league":      {"name": "Champions League", "country": "Europe",       "flag": "🏆"},
+    "soccer_uefa_europa_league":      {"name": "Europa League",    "country": "Europe",       "flag": "🥈"},
+    "soccer_uefa_nations_league":     {"name": "Nations League",   "country": "Europe",       "flag": "🌍"},
+    # Ligas com épocas de verão ou intercaladas
+    "soccer_usa_mls":                 {"name": "MLS",              "country": "USA",          "flag": "🇺🇸"},
+    "soccer_brazil_campeonato":       {"name": "Brasileirão",      "country": "Brazil",       "flag": "🇧🇷"},
+    "soccer_argentina_primera_div":   {"name": "Primera División", "country": "Argentina",    "flag": "🇦🇷"},
+    "soccer_conmebol_copa_america":   {"name": "Copa América",     "country": "S. America",   "flag": "🌎"},
+    "soccer_fifa_world_cup":          {"name": "World Cup",        "country": "World",        "flag": "🌐"},
+    "soccer_turkey_super_lig":        {"name": "Süper Lig",        "country": "Turkey",       "flag": "🇹🇷"},
+    "soccer_netherlands_eredivisie":  {"name": "Eredivisie",       "country": "Netherlands",  "flag": "🇳🇱"},
+    "soccer_australia_aleague":       {"name": "A-League",         "country": "Australia",    "flag": "🇦🇺"},
+    "soccer_japan_j_league":          {"name": "J-League",         "country": "Japan",        "flag": "🇯🇵"},
+    "soccer_mexico_ligamx":           {"name": "Liga MX",          "country": "Mexico",       "flag": "🇲🇽"},
 }
 
 
 @app.get("/api/leagues")
 def get_leagues():
-    """Return the list of supported leagues."""
-    logger.debug(f"GET /api/leagues called")
     return [{"key": k, **v} for k, v in LEAGUES.items()]
+
+
+@app.get("/api/available-leagues")
+async def get_available_leagues():
+    """Consulta a API para descobrir quais ligas têm jogos disponíveis agora."""
+    available = []
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{THE_ODDS_API_BASE}/sports/",
+            params={"apiKey": ODDS_API_KEY, "all": "false"},
+        )
+        if resp.status_code != 200:
+            return []
+        sports = resp.json()
+        sport_keys = {s["key"] for s in sports if s.get("active")}
+        for key, info in LEAGUES.items():
+            if key in sport_keys:
+                available.append({"key": key, **info})
+    return available
 
 
 @app.get("/api/odds/{league_key}")
 async def get_odds(
     league_key: str,
-    bookmakers: Optional[str] = Query(None, description="Comma-separated bookmaker keys to filter"),
+    bookmakers: Optional[str] = Query(None),
 ):
-    logger.info(f"Received request for league: {league_key}, bookmakers: {bookmakers}")
     if league_key not in LEAGUES and league_key != "all":
         raise HTTPException(status_code=400, detail="Liga não suportada")
 
     keys_to_fetch = list(LEAGUES.keys()) if league_key == "all" else [league_key]
     results = []
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=20) as client:
         for key in keys_to_fetch:
             url = f"{THE_ODDS_API_BASE}/sports/{key}/odds/"
             params = {
@@ -75,20 +105,27 @@ async def get_odds(
                 "markets": "h2h",
                 "oddsFormat": "decimal",
             }
-            resp = await client.get(url, params=params)
+            try:
+                resp = await client.get(url, params=params)
+            except Exception as e:
+                logger.warning(f"Request failed for {key}: {e}")
+                continue
 
             if resp.status_code == 401:
                 raise HTTPException(status_code=401, detail="API key inválida")
             if resp.status_code in (404, 422):
-                logger.warning(f"Sport key {key} not available: {resp.status_code}")
-                continue  # skip league on 404 or 422 errors
+                logger.info(f"Liga {key} sem jogos disponíveis ({resp.status_code})")
+                continue
             if resp.status_code != 200:
-                logger.warning(f"Failed to fetch {key}: {resp.status_code}")
-                continue  # skip league on other errors
+                logger.warning(f"Erro ao obter {key}: {resp.status_code}")
+                continue
 
             data = resp.json()
-            league_info = LEAGUES[key]
+            if not data:
+                logger.info(f"Liga {key} sem jogos no momento")
+                continue
 
+            league_info = LEAGUES[key]
             for game in data:
                 bm_list = []
                 for bm in game.get("bookmakers", []):
@@ -121,35 +158,31 @@ async def get_odds(
                         "bookmakers": bm_list,
                     })
 
+    logger.info(f"Total jogos encontrados: {len(results)}")
     return results
 
 
 @app.get("/api/bookmakers")
 async def get_available_bookmakers():
-    """List EU bookmakers available for a given API key."""
-    seen = {}
-    
-    async with httpx.AsyncClient(timeout=10) as client:
-        # Use 'upcoming' to get games across all sports
+    seen: dict[str, str] = {}
+    async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             f"{THE_ODDS_API_BASE}/sports/upcoming/odds/",
-            params={"apiKey": ODDS_API_KEY, "regions": "eu", "markets": "h2h", "oddsFormat": "decimal"},
+            params={
+                "apiKey": ODDS_API_KEY,
+                "regions": "eu",
+                "markets": "h2h",
+                "oddsFormat": "decimal",
+            },
         )
-        
         if resp.status_code == 401:
             raise HTTPException(status_code=401, detail="API key inválida")
-        elif resp.status_code != 200:
-            logger.error(f"Failed to fetch upcoming odds: {resp.status_code}")
+        if resp.status_code != 200:
+            logger.warning(f"Bookmakers fetch failed: {resp.status_code} — {resp.text[:200]}")
             return []
-        
-        data = resp.json()
-        for game in data:
+        for game in resp.json():
             for bm in game.get("bookmakers", []):
                 if bm["key"] not in seen:
                     seen[bm["key"]] = bm["title"]
-    
-    if not seen:
-        logger.warning("No bookmakers found")
-        return []
-    
+
     return [{"key": k, "name": v} for k, v in sorted(seen.items(), key=lambda x: x[1])]
