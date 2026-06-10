@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Odds Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #fff;
+      --surface: #f8fafc;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --subtle: #94a3b8;
+      --home-bg: #eff6ff; --home-fg: #1d4ed8;
+      --draw-bg: #f8fafc; --draw-fg: #475569;
+      --away-bg: #fff7ed; --away-fg: #c2410c;
+      --best-bg: #dcfce7; --best-fg: #15803d;
+      --empty-bg: #f1f5f9; --empty-fg: #94a3b8;
+      --danger-bg: #fee2e2; --danger-fg: #991b1b;
+      --accent: #2563eb;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    #app {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    /* ── Header ── */
+    header { margin-bottom: 1.25rem; }
+    header h1 { font-size: 1.25rem; font-weight: 600; }
+    header p  { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+
+
+    /* ── Top controls ── */
+    .top-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    /* ── Tabs ── */
+    .tab-section { margin-bottom: 1rem; }
+    .tab-label { font-size: 11px; color: var(--subtle); text-transform: uppercase; letter-spacing: .05em; font-weight: 500; margin-bottom: 6px; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tab {
+      padding: 5px 14px;
+      border-radius: 20px;
+      border: 0.5px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .tab:hover { background: var(--surface); }
+    .tab.active { background: var(--home-bg); color: var(--home-fg); border-color: var(--accent); font-weight: 600; }
+
+    /* ── Stats cards ── */
+    .stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .stat-card {
+      border-radius: 10px;
+      padding: 8px 16px;
+      min-width: 100px;
+      border: 1px solid var(--border);
+    }
+    .stat-card .stat-label { font-size: 11px; color: var(--subtle); text-transform: uppercase; letter-spacing: .05em; }
+    .stat-card .stat-val   { font-size: 20px; font-weight: 700; }
+
+    /* ── Filter bar ── */
+    #filter-bar {
+      display: grid;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--surface);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .filter-row .sep { width: 1px; height: 28px; background: var(--border); }
+
+    input[type=text], input[type=number], select {
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      background: #fff;
+      color: var(--text);
+    }
+    #search-input { flex: 1 1 200px; min-width: 160px; }
+    .num-input { width: 64px; }
+    .muted-label { font-size: 12px; color: var(--subtle); white-space: nowrap; }
+
+    /* sort buttons */
+    .sort-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .sort-btn.active { background: var(--home-bg); color: var(--home-fg); border-color: var(--accent); font-weight: 600; }
+
+    /* action buttons */
+    .btn {
+      padding: 7px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn-green  { background: var(--best-bg);   color: var(--best-fg); }
+    .btn-danger { background: var(--danger-bg); color: var(--danger-fg); border-color: #fca5a5; }
+    .toggle-group {
+      display: flex; background: var(--surface);
+      border-radius: var(--radius); padding: 2px; gap: 2px;
+    }
+    .toggle-opt {
+      padding: 5px 12px; border-radius: 6px; border: none;
+      background: transparent; color: var(--muted);
+      font-size: 12px; cursor: pointer;
+    }
+    .toggle-opt.active { background: #fff; color: var(--home-fg); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+    /* ── Error banner ── */
+    .error-banner {
+      background: var(--danger-bg); color: var(--danger-fg);
+      padding: 10px 14px; border-radius: var(--radius);
+      font-size: 13px; margin-bottom: 1rem;
+    }
+
+    /* ── Empty / loading ── */
+    .state-msg { text-align: center; padding: 3rem; color: var(--subtle); font-size: 14px; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: var(--surface); border-bottom: 1px solid var(--border); }
+    th {
+      padding: 10px 12px;
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em;
+      white-space: nowrap;
+    }
+    th.left  { text-align: left; }
+    th.center { text-align: center; }
+    tbody tr { border-bottom: 1px solid #f1f5f9; }
+    tbody tr:nth-child(even) { background: #fafafa; }
+    tbody tr:nth-child(odd)  { background: #fff; }
+    td { padding: 10px 12px; vertical-align: middle; }
+    td.right-border { border-right: 1px solid #f1f5f9; }
+    .team-main { font-weight: 600; }
+    .team-vs   { color: var(--subtle); font-size: 11px; font-weight: 400; }
+    .league-flag { font-size: 15px; }
+    .league-name { color: var(--muted); font-size: 12px; }
+    .date-cell   { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+    /* odd badges */
+    .badge {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 6px; font-weight: 600; font-size: 13px;
+      min-width: 52px; text-align: center;
+    }
+    .badge-empty { background: var(--empty-bg); color: var(--empty-fg); }
+    .badge-best  { background: var(--best-bg);  color: var(--best-fg); }
+    .badge-home  { background: var(--home-bg);  color: var(--home-fg); }
+    .badge-draw  { background: var(--draw-bg);  color: var(--draw-fg); }
+    .badge-away  { background: var(--away-bg);  color: var(--away-fg); }
+
+    /* ── Footer line ── */
+    .footer-line { margin-top: 1rem; font-size: 12px; color: var(--subtle); text-align: right; }
+
+    @media (max-width: 640px) {
+      .stats-row .stat-card { flex: 1 1 calc(50% - 5px); }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>⚽ Odds Dashboard</h1>
+    <p>Ligas europeias e internacionais</p>
+  </header>
+
+  <!-- Top controls -->
+  <div class="top-row">
+    <button id="refresh-btn" class="btn btn-green">↺ Atualizar</button>
+    <span id="last-update" style="font-size:12px;color:var(--subtle)"></span>
+    <div style="margin-left:auto">
+      <div class="toggle-group">
+        <button class="toggle-opt active" data-view="all-bookmakers">Todos os bookmakers</button>
+        <button class="toggle-opt" data-view="best-odds">Melhores odds</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="error-banner" class="error-banner" style="display:none"></div>
+
+  <!-- League tabs -->
+  <div class="tab-section">
+    <div class="tabs" id="league-tabs">
+      <button class="tab active" data-key="all">⚽ Todas</button>
+    </div>
+  </div>
+
+  <!-- Bookmaker tabs -->
+  <div class="tab-section" id="bm-section" style="display:none">
+    <div class="tab-label">Casas de Apostas</div>
+    <div class="tabs" id="bm-tabs">
+      <button class="tab active" data-key="all">✓ Todas</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card" style="background:var(--home-bg)">
+      <div class="stat-label">Jogos</div>
+      <div class="stat-val" id="stat-games" style="color:var(--home-fg)">—</div>
+    </div>
+    <div class="stat-card" style="background:var(--best-bg)">
+      <div class="stat-label">Melhor casa</div>
+      <div class="stat-val" id="stat-home" style="color:var(--best-fg)">—</div>
+    </div>
+    <div class="stat-card" style="background:var(--draw-bg)">
+      <div class="stat-label">Melhor empate</div>
+      <div class="stat-val" id="stat-draw" style="color:var(--draw-fg)">—</div>
+    </div>
+    <div class="stat-card" style="background:var(--away-bg)">
+      <div class="stat-label">Melhor fora</div>
+      <div class="stat-val" id="stat-away" style="color:var(--away-fg)">—</div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div id="filter-bar">
+    <div class="filter-row">
+      <input id="search-input" type="text" placeholder="🔍 Pesquisar equipa ou liga..." />
+      <span class="muted-label">Ordenar:</span>
+      <button class="sort-btn active" data-sort="date">Data ↑</button>
+      <button class="sort-btn" data-sort="game">Jogo</button>
+      <button class="sort-btn" data-sort="home">Odd casa</button>
+    </div>
+    <div class="filter-row">
+      <button class="sort-btn" data-sort="draw">Odd empate</button>
+      <button class="sort-btn" data-sort="away">Odd fora</button>
+      <div class="sep"></div>
+      <span class="muted-label">Odds entre:</span>
+      <input class="num-input" id="min-odd" type="number" placeholder="Mín" step="0.1" min="1" />
+      <span class="muted-label">e</span>
+      <input class="num-input" id="max-odd" type="number" placeholder="Máx" step="0.1" min="1" />
+      <select id="odd-focus">
+        <option value="all">Qualquer odd</option>
+        <option value="home">Só casa (1)</option>
+        <option value="draw">Só empate (X)</option>
+        <option value="away">Só fora (2)</option>
+      </select>
+      <button id="clear-btn" class="btn btn-danger" style="display:none;margin-left:auto">✕ Limpar</button>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div id="content">
+    <div class="state-msg" id="msg-no-key">
+      ⚠️ Insere a tua chave API acima para começar.
+    </div>
+  </div>
+
+  <div class="footer-line" id="footer-line"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────
+const API_BASE = "/api";
+
+const LEAGUES = {
+  "soccer_england_premier_league":  { name: "Premier League",   country: "England",     flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+  "soccer_spain_la_liga":           { name: "La Liga",          country: "Spain",        flag: "🇪🇸" },
+  "soccer_italy_serie_a":           { name: "Serie A",          country: "Italy",        flag: "🇮🇹" },
+  "soccer_germany_bundesliga":      { name: "Bundesliga",       country: "Germany",      flag: "🇩🇪" },
+  "soccer_france_ligue_one":        { name: "Ligue 1",          country: "France",       flag: "🇫🇷" },
+  "soccer_portugal_primeira_liga":  { name: "Primeira Liga",    country: "Portugal",     flag: "🇵🇹" },
+  "soccer_uefa_champs_league":      { name: "Champions League", country: "Europe",       flag: "🏆" },
+  "soccer_uefa_europa_league":      { name: "Europa League",    country: "Europe",       flag: "🥈" },
+  "soccer_uefa_nations_league":     { name: "Nations League",   country: "Europe",       flag: "🌍" },
+  "soccer_usa_mls":                 { name: "MLS",              country: "USA",          flag: "🇺🇸" },
+  "soccer_brazil_campeonato":       { name: "Brasileirão",      country: "Brazil",       flag: "🇧🇷" },
+  "soccer_argentina_primera_div":   { name: "Primera División", country: "Argentina",    flag: "🇦🇷" },
+  "soccer_conmebol_copa_america":   { name: "Copa América",     country: "S. America",   flag: "🌎" },
+  "soccer_fifa_world_cup":          { name: "World Cup",        country: "World",        flag: "🌐" },
+  "soccer_turkey_super_lig":        { name: "Süper Lig",        country: "Turkey",       flag: "🇹🇷" },
+  "soccer_netherlands_eredivisie":  { name: "Eredivisie",       country: "Netherlands",  flag: "🇳🇱" },
+  "soccer_australia_aleague":       { name: "A-League",         country: "Australia",    flag: "🇦🇺" },
+  "soccer_japan_j_league":          { name: "J-League",         country: "Japan",        flag: "🇯🇵" },
+  "soccer_mexico_ligamx":           { name: "Liga MX",          country: "Mexico",       flag: "🇲🇽" },
+};
+
+// ─────────────────────────────────────────
+// State
+// ─────────────────────────────────────────
+const apiKey = true; // chave gerida pelo servidor
+let games         = [];
+let bookmakers    = [];
+let selectedLeague = "all";
+let selectedBook   = "all";
+let viewMode       = "all-bookmakers";
+let sortField      = "date";
+let sortDir        = "asc";
+let search         = "";
+let minOdd         = "";
+let maxOdd         = "";
+let oddFocus       = "all";
+let loading        = false;
+let bmFetched      = false;
+
+// ─────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────
+function fmt(iso) {
+  return new Date(iso).toLocaleString("pt-PT", {
+    weekday: "short", day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit"
+  });
+}
+function f2(n) { return n > 0 ? n.toFixed(2) : "—"; }
+
+function badgeClass(val, field, isBest, isBestView) {
+  if (val <= 0) return "badge-empty";
+  if (isBest && !isBestView) return "badge-best";
+  return "badge-" + field;
+}
+
+function badge(val, field, isBest, isBestView) {
+  const cls = badgeClass(val, field, isBest, isBestView);
+  return `<span class="badge ${cls}">${val > 0 ? val.toFixed(2) : "—"}</span>`;
+}
+
+// ─────────────────────────────────────────
+// API calls
+// ─────────────────────────────────────────
+async function fetchBookmakers() {
+  if (bmFetched) return;
+  bmFetched = true;
+  try {
+    const r = await fetch(`${API_BASE}/bookmakers`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d?.length) {
+      bookmakers = d;
+      renderBmTabs();
+    }
+  } catch {}
+}
+
+async function fetchOdds() {
+  loading = true;
+  setError(null);
+  renderContent();
+  try {
+    const params = selectedBook !== "all" ? `?bookmakers=${selectedBook}` : "";
+    const r = await fetch(`${API_BASE}/odds/${selectedLeague}${params}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    games = await r.json();
+    document.getElementById("last-update").textContent =
+      "Atualizado às " + new Date().toLocaleTimeString("pt-PT");
+  } catch(e) {
+    setError(e.message);
+  } finally {
+    loading = false;
+    renderContent();
+  }
+}
+
+// ─────────────────────────────────────────
+// Derived / filter
+// ─────────────────────────────────────────
+function baseGames() {
+  let list = selectedBook === "all"
+    ? games
+    : games.map(g => ({
+        ...g,
+        bookmakers: g.bookmakers.filter(b => b.key === selectedBook)
+      })).filter(g => g.bookmakers.length > 0);
+
+  if (viewMode === "best-odds") {
+    list = list.map(g => {
+      const bH = Math.max(...g.bookmakers.map(b => b.home));
+      const bD = Math.max(...g.bookmakers.map(b => b.draw));
+      const bA = Math.max(...g.bookmakers.map(b => b.away));
+      const nmH = (g.bookmakers.find(b => b.home === bH) || {}).name || "—";
+      const nmD = (g.bookmakers.find(b => b.draw === bD) || {}).name || "—";
+      const nmA = (g.bookmakers.find(b => b.away === bA) || {}).name || "—";
+      return {
+        ...g, _best: true,
+        bookmakers: [{
+          key: "best", name: `${nmH} / ${nmD} / ${nmA}`,
+          home: bH, draw: bD, away: bA, last_update: null
+        }]
+      };
+    });
+  }
+  return list;
+}
+
+function filteredGames() {
+  let list = baseGames();
+  const q = search.trim().toLowerCase();
+  if (q) list = list.filter(g =>
+    g.home_team.toLowerCase().includes(q) ||
+    g.away_team.toLowerCase().includes(q) ||
+    g.league_name.toLowerCase().includes(q)
+  );
+
+  const mn = parseFloat(minOdd), mx = parseFloat(maxOdd);
+  if (!isNaN(mn) || !isNaN(mx)) {
+    list = list.map(g => ({
+      ...g,
+      bookmakers: g.bookmakers.filter(bm => {
+        const vals = oddFocus === "all"
+          ? [bm.home, bm.draw, bm.away].filter(v => v > 0)
+          : [bm[oddFocus]].filter(v => v > 0);
+        if (!vals.length) return false;
+        return vals.some(v => (!isNaN(mn) ? v >= mn : true) && (!isNaN(mx) ? v <= mx : true));
+      })
+    })).filter(g => g.bookmakers.length > 0);
+  }
+
+  list = [...list].sort((a, b) => {
+    let va, vb;
+    if (sortField === "date") {
+      va = new Date(a.commence_time).getTime();
+      vb = new Date(b.commence_time).getTime();
+    } else if (sortField === "game") {
+      const sa = a.home_team + a.away_team, sb = b.home_team + b.away_team;
+      return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+    } else {
+      va = Math.max(...a.bookmakers.map(bm => bm[sortField]));
+      vb = Math.max(...b.bookmakers.map(bm => bm[sortField]));
+    }
+    return sortDir === "asc" ? va - vb : vb - va;
+  });
+
+  return list;
+}
+
+// ─────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────
+function setError(msg) {
+  const el = document.getElementById("error-banner");
+  if (msg) { el.textContent = "⚠ " + msg; el.style.display = ""; }
+  else el.style.display = "none";
+}
+
+function renderBmTabs() {
+  const sec = document.getElementById("bm-section");
+  const tabs = document.getElementById("bm-tabs");
+  if (!bookmakers.length) { sec.style.display = "none"; return; }
+  sec.style.display = "";
+  tabs.innerHTML = `<button class="tab${selectedBook === "all" ? " active" : ""}" data-key="all">✓ Todas</button>`;
+  bookmakers.forEach(b => {
+    tabs.innerHTML += `<button class="tab${selectedBook === b.key ? " active" : ""}" data-key="${b.key}">${b.name}</button>`;
+  });
+  tabs.querySelectorAll(".tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedBook = btn.dataset.key;
+      renderBmTabs();
+      fetchOdds();
+    });
+  });
+}
+
+function renderLeagueTabs() {
+  const tabs = document.getElementById("league-tabs");
+  tabs.innerHTML = `<button class="tab${selectedLeague === "all" ? " active" : ""}" data-key="all">⚽ Todas</button>`;
+  Object.entries(LEAGUES).forEach(([k, v]) => {
+    tabs.innerHTML += `<button class="tab${selectedLeague === k ? " active" : ""}" data-key="${k}">${v.flag} ${v.name}</button>`;
+  });
+  tabs.querySelectorAll(".tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedLeague = btn.dataset.key;
+      renderLeagueTabs();
+      fetchOdds();
+    });
+  });
+}
+
+function renderStats(list) {
+  const topH = list.reduce((m, g) => Math.max(m, ...g.bookmakers.map(b => b.home)), 0);
+  const topD = list.reduce((m, g) => Math.max(m, ...g.bookmakers.map(b => b.draw)), 0);
+  const topA = list.reduce((m, g) => Math.max(m, ...g.bookmakers.map(b => b.away)), 0);
+  document.getElementById("stat-games").textContent = loading ? "…" : list.length;
+  document.getElementById("stat-home").textContent  = loading ? "…" : f2(topH);
+  document.getElementById("stat-draw").textContent  = loading ? "…" : f2(topD);
+  document.getElementById("stat-away").textContent  = loading ? "…" : f2(topA);
+}
+
+function renderSortBtns() {
+  document.querySelectorAll(".sort-btn").forEach(btn => {
+    const f = btn.dataset.sort;
+    const active = f === sortField;
+    btn.className = "sort-btn" + (active ? " active" : "");
+    let label = { date:"Data", game:"Jogo", home:"Odd casa", draw:"Odd empate", away:"Odd fora" }[f];
+    if (active) label += sortDir === "asc" ? " ↑" : " ↓";
+    btn.textContent = label;
+  });
+}
+
+function renderClearBtn() {
+  const show = search || minOdd || maxOdd || sortField !== "date";
+  document.getElementById("clear-btn").style.display = show ? "" : "none";
+}
+
+function renderContent() {
+  const content = document.getElementById("content");
+  const footer  = document.getElementById("footer-line");
+
+  if (loading && games.length === 0) {
+    content.innerHTML = `<div class="state-msg">A carregar odds…</div>`;
+    footer.textContent = "";
+    return;
+  }
+
+  const list = filteredGames();
+  renderStats(list);
+
+  if (!loading && list.length === 0) {
+    content.innerHTML = `<div class="state-msg">Nenhum jogo encontrado. Experimenta ajustar os filtros.</div>`;
+    footer.textContent = "";
+    return;
+  }
+
+  let rows = "";
+  list.forEach(game => {
+    const bestH = Math.max(...game.bookmakers.map(b => b.home));
+    const bestD = Math.max(...game.bookmakers.map(b => b.draw));
+    const bestA = Math.max(...game.bookmakers.map(b => b.away));
+    const isBestView = !!game._best;
+
+    game.bookmakers.forEach((bm, idx) => {
+      rows += `<tr>`;
+      if (idx === 0) {
+        const rs = game.bookmakers.length;
+        rows += `
+          <td class="right-border" rowspan="${rs}">
+            <span class="league-flag">${game.league_flag}</span>
+            <span class="league-name">${game.league_name}</span>
+          </td>
+          <td class="right-border" rowspan="${rs}" style="min-width:180px">
+            <div class="team-main">${game.home_team}</div>
+            <div class="team-vs">vs ${game.away_team}</div>
+          </td>
+          <td class="right-border date-cell" rowspan="${rs}">${fmt(game.commence_time)}</td>`;
+      }
+      rows += `
+        <td class="right-border" style="font-weight:${isBestView?400:500};font-size:${isBestView?11:13}px;color:${isBestView?"var(--muted)":"var(--text)"}">
+          ${bm.name}
+        </td>
+        <td style="text-align:center">${badge(bm.home, "home", bm.home === bestH && bm.home > 0, isBestView)}</td>
+        <td style="text-align:center">${badge(bm.draw, "draw", bm.draw === bestD && bm.draw > 0, isBestView)}</td>
+        <td style="text-align:center">${badge(bm.away, "away", bm.away === bestA && bm.away > 0, isBestView)}</td>
+      </tr>`;
+    });
+  });
+
+  const bmHeader = viewMode === "best-odds" ? "Melhor bookmaker (1/X/2)" : "Bookmaker";
+  content.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="left">Liga</th>
+            <th class="left">Jogo</th>
+            <th class="left">Data</th>
+            <th class="left">${bmHeader}</th>
+            <th class="center">1 Casa</th>
+            <th class="center">X Empate</th>
+            <th class="center">2 Fora</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  const totalRows = list.reduce((t, g) => t + g.bookmakers.length, 0);
+  footer.textContent = `${list.length} jogo${list.length !== 1 ? "s" : ""} · ${totalRows} linha${totalRows !== 1 ? "s" : ""}`;
+}
+
+// ─────────────────────────────────────────
+// Event wiring
+// ─────────────────────────────────────────
+
+// Refresh
+document.getElementById("refresh-btn").addEventListener("click", () => {
+  if (!loading) fetchOdds();
+});
+
+// View toggle
+document.querySelectorAll(".toggle-opt").forEach(btn => {
+  btn.addEventListener("click", () => {
+    viewMode = btn.dataset.view;
+    document.querySelectorAll(".toggle-opt").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    renderContent();
+  });
+});
+
+// Sort buttons
+document.querySelectorAll(".sort-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const f = btn.dataset.sort;
+    if (sortField === f) sortDir = sortDir === "asc" ? "desc" : "asc";
+    else { sortField = f; sortDir = f === "date" ? "asc" : "desc"; }
+    renderSortBtns();
+    renderClearBtn();
+    renderContent();
+  });
+});
+
+// Search
+document.getElementById("search-input").addEventListener("input", e => {
+  search = e.target.value;
+  renderClearBtn();
+  renderContent();
+});
+
+// Odd filters
+["min-odd","max-odd"].forEach(id => {
+  document.getElementById(id).addEventListener("input", e => {
+    if (id === "min-odd") minOdd = e.target.value;
+    else maxOdd = e.target.value;
+    renderClearBtn();
+    renderContent();
+  });
+});
+document.getElementById("odd-focus").addEventListener("change", e => {
+  oddFocus = e.target.value;
+  renderContent();
+});
+
+// Clear
+document.getElementById("clear-btn").addEventListener("click", () => {
+  search = ""; minOdd = ""; maxOdd = "";
+  sortField = "date"; sortDir = "asc"; oddFocus = "all";
+  document.getElementById("search-input").value = "";
+  document.getElementById("min-odd").value = "";
+  document.getElementById("max-odd").value = "";
+  document.getElementById("odd-focus").value = "all";
+  renderSortBtns();
+  renderClearBtn();
+  renderContent();
+});
+
+// ─────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────
+renderLeagueTabs();
+renderContent();
+fetchBookmakers();
+fetchOdds();
+</script>
+</body>
+</html>
