@@ -173,3 +173,8 @@ function calcLay() {
     <div class="calc-result-item"><div class="label">Diferença</div><div class="value">${curr(Math.abs(backWinProfit - backLoseProfit))}</div></div>
     <div class="calc-result-item"><div class="label">Comissão paga</div><div class="value">${curr(layStake * commission)}</div></div>`;
 }
+
+// ─────────────────────────────────────────────────────
+// Export to global scope
+// ─────────────────────────────────────────────────────
+window.initHedgingPanel = initHedgingPanel;
