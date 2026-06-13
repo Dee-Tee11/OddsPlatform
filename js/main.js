@@ -181,23 +181,30 @@ function setError(msg) {
 }
 
 // ─────────────────────────────────────────────────────
-// Main Navigation
+// Main Navigation - Set active tab based on current page
 // ─────────────────────────────────────────────────────
-document.querySelectorAll(".nav-tab").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".nav-tab").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-    btn.classList.add("active");
-    const panelId = "panel-" + btn.dataset.panel;
-    const panel = document.getElementById(panelId);
-    if (panel) {
-      panel.classList.add("active");
-      // Trigger panel-specific initialization if needed
-      const initFunc = window["init" + btn.dataset.panel.charAt(0).toUpperCase() + btn.dataset.panel.slice(1) + "Panel"];
-      if (initFunc) initFunc();
+function initNavigation() {
+  const currentPage = window.location.pathname.split('/').pop() || 'odds.html';
+  const navTabs = document.querySelectorAll('.nav-tab');
+  
+  navTabs.forEach(tab => {
+    const href = tab.getAttribute('href');
+    if (href === currentPage || (currentPage === '' && href === 'odds.html')) {
+      tab.classList.add('active');
+    } else {
+      tab.classList.remove('active');
     }
   });
-});
+}
+
+// Initialize navigation on page load
+document.addEventListener('DOMContentLoaded', initNavigation);
+// Also run immediately in case DOM is already loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initNavigation);
+} else {
+  initNavigation();
+}
 
 // Refresh button
 document.getElementById("refresh-btn").addEventListener("click", () => {
@@ -367,6 +374,24 @@ document.getElementById("history-modal").addEventListener("click", e => {
 // Initialization
 // ─────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-  fetchBookmakers();
-  fetchOdds();
+  // Determine which panel is on this page and initialize accordingly
+  const oddsPanel = document.getElementById("panel-odds");
+  const hedgingPanel = document.getElementById("panel-hedging");
+  const arbitragePanel = document.getElementById("panel-arbitrage");
+  
+  if (oddsPanel) {
+    // Odds page
+    fetchBookmakers();
+    fetchOdds();
+  } else if (hedgingPanel && window.initHedgingPanel) {
+    // Hedging page
+    fetchBookmakers();
+    fetchOdds();
+    window.initHedgingPanel();
+  } else if (arbitragePanel && window.initArbitragePanel) {
+    // Arbitrage page
+    fetchBookmakers();
+    fetchOdds();
+    window.initArbitragePanel();
+  }
 });

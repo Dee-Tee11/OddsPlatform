@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Odds Dashboard</title>
+  <title>Arbitrage Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="css/odds.css" />
   <link rel="stylesheet" href="css/calculators.css" />
@@ -24,22 +24,16 @@
 
   <!-- Main nav -->
   <nav class="main-nav">
-    <button class="nav-tab active" data-panel="odds">📊 Odds</button>
-    <button class="nav-tab" data-panel="hedging">🛡️ Hedging</button>
-    <button class="nav-tab" data-panel="arbitrage">⚖️ Arbitragem</button>
+    <a href="odds.html" class="nav-tab">📊 Odds</a>
+    <a href="hedging.html" class="nav-tab">🛡️ Hedging</a>
+    <a href="arbitrage.html" class="nav-tab active">⚖️ Arbitragem</a>
   </nav>
 
   <!-- Error banner -->
   <div id="error-banner" class="error-banner" style="display:none"></div>
 
-  <!-- ══════════════ ODDS PANEL ══════════════ -->
-  <div id="panel-odds" class="panel active"></div>
-
-  <!-- ══════════════ HEDGING PANEL ══════════════ -->
-  <div id="panel-hedging" class="panel"></div>
-
   <!-- ══════════════ ARBITRAGE PANEL ══════════════ -->
-  <div id="panel-arbitrage" class="panel"></div>
+  <div id="panel-arbitrage" class="panel active"></div>
 
 </div><!-- /app -->
 
@@ -144,8 +138,6 @@
 </div>
 
 <script src="js/main.js"></script>
-<script src="js/odds.js"></script>
-<script src="js/hedging.js"></script>
 <script src="js/arbitrage.js"></script>
 </body>
 </html>
