@@ -65,6 +65,54 @@ const AppState = {
 };
 
 // ─────────────────────────────────────────────────────
+// DATA CACHE  (localStorage, TTL 2 min)
+// ─────────────────────────────────────────────────────
+const CACHE_KEY    = "oddsdash_games";
+const CACHE_TS_KEY = "oddsdash_games_ts";
+const CACHE_LG_KEY = "oddsdash_games_league";
+const CACHE_BM_KEY = "oddsdash_bookmakers";
+const CACHE_TTL    = 2 * 60 * 1000; // 2 minutos em ms
+
+function saveCache(games, leagueKey) {
+  try {
+    localStorage.setItem(CACHE_KEY,    JSON.stringify(games));
+    localStorage.setItem(CACHE_TS_KEY, Date.now().toString());
+    localStorage.setItem(CACHE_LG_KEY, leagueKey);
+  } catch (_) { /* quota — ignora silenciosamente */ }
+}
+
+function saveBookmarkersCache(bms) {
+  try { localStorage.setItem(CACHE_BM_KEY, JSON.stringify(bms)); } catch (_) {}
+}
+
+function loadBookmarkersCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_BM_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function loadCache(leagueKey) {
+  try {
+    const ts     = parseInt(localStorage.getItem(CACHE_TS_KEY) || "0", 10);
+    const league = localStorage.getItem(CACHE_LG_KEY);
+    if (league !== leagueKey)         return null; // liga diferente
+    if (Date.now() - ts > CACHE_TTL) return null; // expirou
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function clearCache() {
+  [CACHE_KEY, CACHE_TS_KEY, CACHE_LG_KEY].forEach(k => localStorage.removeItem(k));
+}
+
+function cacheTimestamp() {
+  const ts = parseInt(localStorage.getItem(CACHE_TS_KEY) || "0", 10);
+  return ts ? new Date(ts).toLocaleTimeString("pt-PT") : null;
+}
+
+// ─────────────────────────────────────────────────────
 // Utilities
 // ─────────────────────────────────────────────────────
 function fmt(iso) {
@@ -114,6 +162,16 @@ function trendArrow(values) {
 // ─────────────────────────────────────────────────────
 async function fetchBookmakers() {
   if (AppState.bmFetched) return;
+
+  // Tenta cache de bookmakers primeiro (não expira — mudam raramente)
+  const cached = loadBookmarkersCache();
+  if (cached && cached.length) {
+    AppState.bookmakers = cached;
+    AppState.bmFetched = true;
+    if (window.initOddsPanel) initOddsPanel();
+    return;
+  }
+
   AppState.bmFetched = true;
   try {
     const r = await fetch(`${API_BASE}/bookmakers`);
@@ -121,7 +179,8 @@ async function fetchBookmakers() {
     const d = await r.json();
     if (d?.length) {
       AppState.bookmakers = d;
-      initOddsPanel();
+      saveBookmarkersCache(d);
+      if (window.initOddsPanel) initOddsPanel();
     }
   } catch (e) {
     console.error("Error fetching bookmakers:", e);
@@ -129,29 +188,44 @@ async function fetchBookmakers() {
 }
 
 async function fetchOdds() {
+  // 1. Tenta cache primeiro — resposta instantânea entre tabs
+  const cached = loadCache(AppState.selectedLeague);
+  if (cached) {
+    AppState.games = cached;
+    const ts = cacheTimestamp();
+    document.getElementById("last-update").textContent =
+      ts ? `Cache · ${ts}` : "";
+    _afterFetch();
+    return;
+  }
+
+  // 2. Sem cache válido — vai à API
   AppState.loading = true;
   setError(null);
+  _afterFetch(); // mostra spinner
+
   try {
-    const params = AppState.selectedBook !== "all" ? `?bookmakers=${AppState.selectedBook}` : "";
+    const params = AppState.selectedBook !== "all"
+      ? `?bookmakers=${AppState.selectedBook}` : "";
     const r = await fetch(`${API_BASE}/odds/${AppState.selectedLeague}${params}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     AppState.games = await r.json();
+
+    saveCache(AppState.games, AppState.selectedLeague);
+
     document.getElementById("last-update").textContent =
       "Atualizado às " + new Date().toLocaleTimeString("pt-PT");
-    if (window.refreshArbScanner) {
-      window.refreshArbScanner();
-    }
-    if (window.renderOddsContent) {
-      window.renderOddsContent();
-    }
   } catch (e) {
     setError(e.message);
   } finally {
     AppState.loading = false;
-    if (window.renderOddsContent) {
-      window.renderOddsContent();
-    }
+    _afterFetch();
   }
+}
+
+function _afterFetch() {
+  if (window.refreshArbScanner) window.refreshArbScanner();
+  if (window.renderOddsContent) window.renderOddsContent();
 }
 
 async function fetchHistory(gameId) {
@@ -181,34 +255,27 @@ function setError(msg) {
 }
 
 // ─────────────────────────────────────────────────────
-// Main Navigation - Set active tab based on current page
+// Navigation — marca a tab activa pela URL
 // ─────────────────────────────────────────────────────
 function initNavigation() {
-  const currentPage = window.location.pathname.split('/').pop() || 'odds.html';
-  const navTabs = document.querySelectorAll('.nav-tab');
-  
-  navTabs.forEach(tab => {
-    const href = tab.getAttribute('href');
-    if (href === currentPage || (currentPage === '' && href === 'odds.html')) {
-      tab.classList.add('active');
-    } else {
-      tab.classList.remove('active');
-    }
+  const current = window.location.pathname.split("/").pop() || "odds.html";
+  document.querySelectorAll(".nav-tab").forEach(tab => {
+    const href = tab.getAttribute("href");
+    tab.classList.toggle("active",
+      href === current || (current === "" && href === "odds.html"));
   });
 }
 
-// Initialize navigation on page load
-document.addEventListener('DOMContentLoaded', initNavigation);
-// Also run immediately in case DOM is already loaded
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initNavigation);
-} else {
-  initNavigation();
-}
+document.addEventListener("DOMContentLoaded", initNavigation);
+if (document.readyState !== "loading") initNavigation();
 
-// Refresh button
+// ─────────────────────────────────────────────────────
+// Refresh button — força fetch ignorando cache
+// ─────────────────────────────────────────────────────
 document.getElementById("refresh-btn").addEventListener("click", () => {
-  if (!AppState.loading) fetchOdds();
+  if (AppState.loading) return;
+  clearCache();
+  fetchOdds();
 });
 
 // ─────────────────────────────────────────────────────
@@ -374,22 +441,18 @@ document.getElementById("history-modal").addEventListener("click", e => {
 // Initialization
 // ─────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-  // Determine which panel is on this page and initialize accordingly
-  const oddsPanel = document.getElementById("panel-odds");
-  const hedgingPanel = document.getElementById("panel-hedging");
+  const oddsPanel      = document.getElementById("panel-odds");
+  const hedgingPanel   = document.getElementById("panel-hedging");
   const arbitragePanel = document.getElementById("panel-arbitrage");
-  
+
   if (oddsPanel) {
-    // Odds page
     fetchBookmakers();
     fetchOdds();
   } else if (hedgingPanel && window.initHedgingPanel) {
-    // Hedging page
     fetchBookmakers();
     fetchOdds();
     window.initHedgingPanel();
   } else if (arbitragePanel && window.initArbitragePanel) {
-    // Arbitrage page
     fetchBookmakers();
     fetchOdds();
     window.initArbitragePanel();
