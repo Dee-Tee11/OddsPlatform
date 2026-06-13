@@ -207,15 +207,20 @@ async function fetchOdds() {
   try {
     const params = AppState.selectedBook !== "all"
       ? `?bookmakers=${AppState.selectedBook}` : "";
-    const r = await fetch(`${API_BASE}/odds/${AppState.selectedLeague}${params}`);
+    const url = `${API_BASE}/odds/${AppState.selectedLeague}${params}`;
+    console.log("📡 Fetching odds from:", url);
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    AppState.games = await r.json();
+    const data = await r.json();
+    console.log("✅ Data received:", data);
+    AppState.games = data;
 
     saveCache(AppState.games, AppState.selectedLeague);
 
     document.getElementById("last-update").textContent =
       "Atualizado às " + new Date().toLocaleTimeString("pt-PT");
   } catch (e) {
+    console.error("❌ Error fetching odds:", e);
     setError(e.message);
   } finally {
     AppState.loading = false;
@@ -224,8 +229,19 @@ async function fetchOdds() {
 }
 
 function _afterFetch() {
-  if (window.refreshArbScanner) window.refreshArbScanner();
-  if (window.renderOddsContent) window.renderOddsContent();
+  console.log("🔄 _afterFetch called");
+  console.log("   - window.renderOddsContent exists?", !!window.renderOddsContent);
+  console.log("   - window.refreshArbScanner exists?", !!window.refreshArbScanner);
+  if (window.refreshArbScanner) {
+    console.log("   - Calling refreshArbScanner");
+    window.refreshArbScanner();
+  }
+  if (window.renderOddsContent) {
+    console.log("   - Calling renderOddsContent");
+    window.renderOddsContent();
+  } else {
+    console.error("❌ renderOddsContent not found!");
+  }
 }
 
 async function fetchHistory(gameId) {

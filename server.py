@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from typing import Optional
 import os
@@ -18,36 +19,69 @@ load_dotenv()
 
 app = FastAPI()
 
+# ── CORS Configuration ────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 THE_ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
 if not ODDS_API_KEY:
-    raise ValueError("A variável ODDS_API_KEY não foi configurada no arquivo .env")
+    logger.warning("⚠️  ODDS_API_KEY não configurada! Alguns endpoints podem não funcionar.")
+    # Don't raise, let it continue - so we get better error messages
 
 # ── Odds history storage ──────────────────────────────────────────────────────
+# Try to use file, but fallback to memory cache if filesystem is not writable
 HISTORY_FILE = Path("odds_history.json")
+HISTORY_MEMORY_CACHE = {}  # Fallback cache for Render's ephemeral filesystem
+HISTORY_USE_FILE = False  # Will be set to True if file write succeeds
 
 def load_history() -> dict:
+    # Try file first if available
     if HISTORY_FILE.exists():
         try:
-            return json.loads(HISTORY_FILE.read_text())
-        except:
-            return {}
-    return {}
+            data = json.loads(HISTORY_FILE.read_text())
+            logger.info("📂 History loaded from file")
+            return data
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to read history file: {e}")
+            return HISTORY_MEMORY_CACHE
+    
+    # Return memory cache
+    return HISTORY_MEMORY_CACHE.copy()
 
 def save_history(h: dict):
-    HISTORY_FILE.write_text(json.dumps(h))
+    global HISTORY_USE_FILE
+    
+    # Try to save to file
+    try:
+        HISTORY_FILE.write_text(json.dumps(h))
+        HISTORY_USE_FILE = True
+        logger.debug("💾 History saved to file")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not write to file ({e}), using memory cache only")
+        HISTORY_USE_FILE = False
+        # Keep in memory
+        HISTORY_MEMORY_CACHE.update(h)
 
 def record_odds(game_id: str, bm_key: str, home: float, draw: float, away: float):
-    h = load_history()
-    key = f"{game_id}::{bm_key}"
-    if key not in h:
-        h[key] = []
-    now = datetime.now(timezone.utc).isoformat()
-    h[key].append({"ts": now, "home": home, "draw": draw, "away": away})
-    # keep last 48 entries per game+bookmaker
-    h[key] = h[key][-48:]
-    save_history(h)
+    try:
+        h = load_history()
+        key = f"{game_id}::{bm_key}"
+        if key not in h:
+            h[key] = []
+        now = datetime.now(timezone.utc).isoformat()
+        h[key].append({"ts": now, "home": home, "draw": draw, "away": away})
+        # keep last 48 entries per game+bookmaker
+        h[key] = h[key][-48:]
+        save_history(h)
+    except Exception as e:
+        logger.warning(f"⚠️  Could not record odds: {e}")
 
 def get_history_for_game(game_id: str) -> dict:
     h = load_history()
@@ -95,9 +129,9 @@ async def fetch_elo_ratings() -> dict:
 
     ratings = {}
     urls = [
-        "http://api.clubelo.com/today",
+        "https://api.clubelo.com/today",  # Changed to HTTPS
     ]
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=20, verify=False) as client:  # Increased timeout to 20s
         for url in urls:
             try:
                 r = await client.get(url)
@@ -111,7 +145,7 @@ async def fetch_elo_ratings() -> dict:
                             ratings[club.lower()] = elo
                     break
             except Exception as e:
-                logger.warning(f"ELO fetch failed: {e}")
+                logger.warning(f"🔴 ELO fetch failed: {e}")
 
     ELO_CACHE["data"] = ratings
     ELO_CACHE["ts"] = now
@@ -166,6 +200,16 @@ def serve_index():
     return FileResponse("index.html")
 
 
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint - useful for debugging"""
+    return {
+        "status": "ok",
+        "has_api_key": bool(ODDS_API_KEY),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/odds/{league_key}")
 async def get_odds(league_key: str, bookmakers: Optional[str] = Query(None)):
     if league_key not in LEAGUES and league_key not in ("all", "top"):
@@ -185,8 +229,11 @@ async def get_odds(league_key: str, bookmakers: Optional[str] = Query(None)):
     except:
         pass
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=30, verify=False) as client:  # Increased timeout to 30s
         for key in keys_to_fetch:
+            if not ODDS_API_KEY:
+                logger.error(f"❌ ODDS_API_KEY não configurada! Não posso buscar {key}")
+                continue
             params = {
                 "apiKey": ODDS_API_KEY,
                 "regions": "eu",
@@ -196,7 +243,7 @@ async def get_odds(league_key: str, bookmakers: Optional[str] = Query(None)):
             try:
                 resp = await client.get(f"{THE_ODDS_API_BASE}/sports/{key}/odds/", params=params)
             except Exception as e:
-                logger.warning(f"Request failed for {key}: {e}")
+                logger.error(f"🔴 Request failed for {key}: {e}")
                 continue
 
             if resp.status_code == 401:
@@ -209,7 +256,10 @@ async def get_odds(league_key: str, bookmakers: Optional[str] = Query(None)):
 
             data = resp.json()
             if not data:
+                logger.warning(f"📭 {key}: Nenhum dado retornado pela API")
                 continue
+
+            logger.info(f"📊 {key}: {len(data)} jogos encontrados")
 
             league_info = LEAGUES[key]
             for game in data:
@@ -265,7 +315,10 @@ async def get_odds(league_key: str, bookmakers: Optional[str] = Query(None)):
                         "elo_probs": elo_probs,
                     })
 
+    logger.info(f"🎯 Fetching odds for league(s): {keys_to_fetch}")
     logger.info(f"Total jogos encontrados: {len(results)}")
+    if not results:
+        logger.warning("⚠️  Nenhum jogo encontrado! Pode estar sem dados agora.")
     return results
 
 
@@ -277,24 +330,33 @@ async def get_odds_history(game_id: str):
 @app.get("/api/bookmakers")
 async def get_bookmakers():
     seen: dict[str, str] = {}
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(
-            f"{THE_ODDS_API_BASE}/sports/upcoming/odds/",
-            params={
-                "apiKey": ODDS_API_KEY,
-                "regions": "eu",
-                "markets": "h2h",
-                "oddsFormat": "decimal",
-            },
-        )
-        if resp.status_code == 401:
-            raise HTTPException(status_code=401, detail="API key inválida")
-        if resp.status_code != 200:
+    if not ODDS_API_KEY:
+        logger.error("❌ ODDS_API_KEY não configurada!")
+        return []
+    
+    async with httpx.AsyncClient(timeout=30, verify=False) as client:  # Increased timeout to 30s
+        try:
+            resp = await client.get(
+                f"{THE_ODDS_API_BASE}/sports/upcoming/odds/",
+                params={
+                    "apiKey": ODDS_API_KEY,
+                    "regions": "eu",
+                    "markets": "h2h",
+                    "oddsFormat": "decimal",
+                },
+            )
+            if resp.status_code == 401:
+                raise HTTPException(status_code=401, detail="API key inválida ou expirada")
+            if resp.status_code != 200:
+                logger.warning(f"⚠️  Status {resp.status_code} ao buscar bookmakers")
+                return []
+            for game in resp.json():
+                for bm in game.get("bookmakers", []):
+                    if bm["key"] not in seen:
+                        seen[bm["key"]] = bm["title"]
+        except Exception as e:
+            logger.error(f"🔴 Erro ao buscar bookmakers: {e}")
             return []
-        for game in resp.json():
-            for bm in game.get("bookmakers", []):
-                if bm["key"] not in seen:
-                    seen[bm["key"]] = bm["title"]
 
     return [{"key": k, "name": v} for k, v in sorted(seen.items(), key=lambda x: x[1])]
 

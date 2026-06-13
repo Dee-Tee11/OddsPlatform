@@ -337,6 +337,8 @@ function renderOddsContent() {
   const content = document.getElementById("content");
   const footer = document.getElementById("footer-line");
 
+  console.log("🎨 renderOddsContent called. AppState.games:", AppState.games);
+
   if (AppState.loading && AppState.games.length === 0) {
     content.innerHTML = `<div class="state-msg"><span class="spinner"></span>A carregar odds…</div>`;
     footer.textContent = "";
@@ -344,6 +346,7 @@ function renderOddsContent() {
   }
 
   const list = filteredGames();
+  console.log("📋 Filtered games:", list);
   renderStats(list);
 
   if (!AppState.loading && list.length === 0) {
