@@ -715,3 +715,9 @@ function drawHistoryChart(entries, game) {
     lx += ctx.measureText(label).width + 48;
   });
 }
+
+// ─────────────────────────────────────────────────────
+// Export to global scope
+// ─────────────────────────────────────────────────────
+window.initOddsPanel = initOddsPanel;
+window.renderOddsContent = renderOddsContent;

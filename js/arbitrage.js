@@ -529,3 +529,9 @@ function copyArbPlan(idx, gameName, sbEncoded) {
     setTimeout(() => btn.textContent = orig, 2000);
   }
 }
+
+// ─────────────────────────────────────────────────────
+// Export to global scope
+// ─────────────────────────────────────────────────────
+window.initArbitragePanel = initArbitragePanel;
+window.refreshArbScanner = refreshArbScanner;
